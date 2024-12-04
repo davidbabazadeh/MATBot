@@ -1,0 +1,30 @@
+<launch>
+    <!-- Args that can be set from command line -->
+    <arg name="marker_id" default="0"/>
+    <arg name="agent_id" default="0"/>
+    <arg name="poll_rate" default="10.0"/>
+    
+    <!-- Camera settings -->
+    <include file="lab4_cam/launch/run_cam.launch"/>
+
+    <!-- AR tag tracker -->
+    <include file="lab4_cam/launch/ar_track.launch">
+        <arg name="marker_size" value="16.5"/>
+        <arg name="max_new_marker_error" value="0.05"/>
+        <arg name="max_track_error" value="0.05"/>
+        <arg name="cam_image_topic" value="/usb_cam/image_raw"/>
+        <arg name="cam_info_topic" value="/usb_cam/camera_info"/>
+        <arg name="output_frame" value="/usb_cam"/>
+    </include>
+
+    <!-- State collector node -->
+    <node name="ar_state_collector_$(arg agent_id)" 
+          pkg="matbot" 
+          type="ar_state_collector.py" 
+          output="screen">
+        <param name="marker_id" value="$(arg marker_id)"/>
+        <param name="agent_id" value="$(arg agent_id)"/>
+        <param name="poll_rate" value="$(arg poll_rate)"/>
+    </node>
+
+</launch>
