@@ -2,22 +2,29 @@
 import rospy
 import tf2_ros
 import numpy as np
+from collections import deque
 from geometry_msgs.msg import PoseStamped
 from ar_track_alvar_msgs.msg import AlvarMarkers
 from std_msgs.msg import Float64MultiArray
 import tf2_geometry_msgs
+from tf.transformations import euler_from_quaternion
 
 class ARStateCollector:
-    def __init__(self):
-        rospy.init_node('ar_state_collector')
+    def __init__(self, agent_id):
+        # Initialize parameters
+        self.agent_id = agent_id
+        self.poll_rate = rospy.get_param('~poll_rate', 10.0)
+        self.history_length = rospy.get_param('~history_length', 50)  # 5 seconds at 10Hz
         
-        # Parameters
-        self.agent_id = rospy.get_param('~agent_id', 0)
-        self.poll_rate = rospy.get_param('~poll_rate', 10.0)  
-
+        # Initialize state storage
+        self.state_history = deque(maxlen=self.history_length)
+        self.marker_id = agent_id  # Assuming marker ID matches agent ID
+        
+        # TF setup
         self.tf_buffer = tf2_ros.Buffer()
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer)
         
+        # Publishers and Subscribers
         self.state_pub = rospy.Publisher(
             f'/agent/{self.agent_id}/state_history',
             Float64MultiArray,
@@ -30,15 +37,11 @@ class ARStateCollector:
             self.ar_callback
         )
         
-        # State storage
-        self.latest_pose = None
-        self.marker_id = rospy.get_param('~marker_id', 0)  # AR tag ID to track
-        
-        rospy.Timer(rospy.Duration(1.0/self.poll_rate), self.timer_callback)
-        
+        # Timer for publishing state history
+        rospy.Timer(rospy.Duration(1.0/self.poll_rate), self.publish_state_history)
+
     def ar_callback(self, msg):
-        """Process incoming AR tag detections"""
-        # Find marker with matching ID
+        """Process AR tag detections and update state history"""
         matching_markers = [m for m in msg.markers if m.id == self.marker_id]
         if not matching_markers:
             return
@@ -46,60 +49,64 @@ class ARStateCollector:
         marker = matching_markers[0]
         
         try:
-            # Transform from camera frame (/usb_cam) to world frame
+            # Transform from camera to odom frame
             transform = self.tf_buffer.lookup_transform(
-                'odom',  # target frame - the fixed world coordinate frame
-                marker.header.frame_id,  # source frame - from the AR marker detection
+                'odom',
+                marker.header.frame_id,
                 marker.header.stamp,
                 rospy.Duration(1.0)
             )
-            #################### refer to lab 8
-            # Convert marker pose to PoseStamped
+            
+            # Convert marker pose
             marker_pose = PoseStamped()
             marker_pose.header = marker.header
             marker_pose.pose = marker.pose.pose
             
-            # Transform pose to world frame
-            pose_world = tf2_geometry_msgs.do_transform_pose(
-                marker_pose,
-                transform
-            )
-            ####################
-            self.latest_pose = pose_world
+            # Transform to world frame
+            pose_world = tf2_geometry_msgs.do_transform_pose(marker_pose, transform)
+            
+            # Extract position and orientation
+            pos = pose_world.pose.position
+            ori = pose_world.pose.orientation
+            euler = euler_from_quaternion([ori.x, ori.y, ori.z, ori.w])
+            
+            # Create state dictionary
+            state = {
+                'position': np.array([pos.x, pos.y]),  # 2D position
+                'velocity': np.zeros(2),  # Will be calculated if history exists
+                'heading': euler[2],  # yaw angle
+                'timestamp': pose_world.header.stamp.to_sec()
+            }
+            
+            # Calculate velocity if we have previous states
+            if self.state_history:
+                prev_state = self.state_history[-1]
+                dt = state['timestamp'] - prev_state['timestamp']
+                if dt > 0:
+                    state['velocity'] = (state['position'] - prev_state['position']) / dt
+            
+            self.state_history.append(state)
             
         except (tf2_ros.LookupException, tf2_ros.ConnectivityException,
                 tf2_ros.ExtrapolationException) as e:
             rospy.logwarn(f"TF2 error: {e}")
-    
-    def timer_callback(self, event):
-        """Publish state at regular intervals"""
-        if self.latest_pose is None:
+
+    def publish_state_history(self, event=None):
+        """Publish state history in Trajectron++ compatible format"""
+        if not self.state_history:
             return
             
-        #################### refer to lab 8
-        # Extract position and orientation
-        pos = self.latest_pose.pose.position
-        ori = self.latest_pose.pose.orientation
+        # Format for Trajectron++: [x, y, vx, vy, heading, timestamp]
+        history_array = []
+        for state in self.state_history:
+            state_entry = [
+                *state['position'],  # x, y
+                *state['velocity'],  # vx, vy
+                state['heading'],    # heading
+                state['timestamp']   # timestamp
+            ]
+            history_array.extend(state_entry)
         
-        # Create state array [x, y, z, qx, qy, qz, qw, timestamp, marker_id]
-        state = [
-            pos.x, pos.y, pos.z,
-            ori.x, ori.y, ori.z, ori.w,
-            self.latest_pose.header.stamp.to_sec(),
-            float(self.marker_id)
-        ]
-        ####################
-        # Publish state
         msg = Float64MultiArray()
-        msg.data = state
+        msg.data = history_array
         self.state_pub.publish(msg)
-
-def main():
-    try:
-        collector = ARStateCollector()
-        rospy.spin()
-    except rospy.ROSInterruptException:
-        pass
-
-if __name__ == '__main__':
-    main()
