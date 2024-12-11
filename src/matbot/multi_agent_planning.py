@@ -8,12 +8,124 @@ import numpy as np
 
 import matplotlib.pyplot as plt
 
+
+# T++ imports
+
+import json
+import os
+import re
+from collections import defaultdict
+from pathlib import Path
+from typing import DefaultDict, Dict, Final, List, Optional, Union
+
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
 import torch
+import trajdata.visualization.vis as trajdata_vis
+from torch import nn, optim
+from torch.utils import data
+from tqdm import tqdm
+from trajdata import AgentBatch, AgentType, UnifiedDataset
+
+import trajectron.visualization as visualization
+from trajectron.model.model_registrar import ModelRegistrar
+from trajectron.model.model_utils import UpdateMode
+from trajectron.model.trajectron import Trajectron
+
+
+if torch.cuda.is_available():
+    device = "cuda:0"
+    torch.cuda.set_device(0)
+else:
+    device = "cpu"
+
+base_checkpoint = 20
+
+def load_model(
+    model_dir: str,
+    device: str,
+    epoch: int = 10,
+    custom_hyperparams: Optional[Dict] = None,
+):
+    save_path = Path(model_dir) / f"model_registrar-{epoch}.pt"
+
+    model_registrar = ModelRegistrar(model_dir, device)
+    with open(os.path.join(model_dir, "config.json"), "r") as config_json:
+        hyperparams = json.load(config_json)
+
+    if custom_hyperparams is not None:
+        hyperparams.update(custom_hyperparams)
+
+    trajectron = Trajectron(model_registrar, hyperparams, None, device)
+    trajectron.set_environment()
+    trajectron.set_annealing_params()
+
+    checkpoint = torch.load(save_path, map_location=device)
+    trajectron.load_state_dict(checkpoint["model_state_dict"], strict=False)
+
+    return trajectron, hyperparams
 
 # importing trajectron++ (tpp)
-model_path = '../../pretrained_models/model_registrar-20.pt'
-tpp = torch.load(model_path)
-tpp.eval()
+model_path = '../../pretrained_models/nusc_mm_base_tpp-11_Sep_2022_19_15_45'
+tpp, _ = load_model(model_path, device, epoch=base_checkpoint)  # not using custom paramters
+
+# https://github.com/NVlabs/adaptive-prediction/blob/main/experiments/nuScenes/full_per_agent_eval.py#L456
+# structure to make call to T++ with tpp, online_batch is of type AgentBatch (in trajdata) and has a lot of inputs
+# output is possibly? stored in model_eval_dict: DefaultDict[str, Union[List[int], List[float]]]
+# TODO: make call to T++ with out collected data. possibly done using this function
+
+def per_agent_eval(
+    curr_agent: str,
+    model: Trajectron,
+    model_name: str,
+    batch: AgentBatch,
+    agent_ts: int,
+    model_eval_dict: DefaultDict[str, Union[List[int], List[float]]],
+    plot=True,
+):
+    with torch.no_grad():
+        if plot:
+            plot_outputs(
+                online_eval_dataset,
+                dataset_idx=batch.data_idx[0].item(),
+                model=model,
+                model_name=model_name,
+                agent_ts=agent_ts,
+                subfolder="per_agent_lyft/",
+            )
+
+        model_perf = defaultdict(lambda: defaultdict(list))
+        eval_results: Dict[
+            AgentType, Dict[str, torch.Tensor]
+        ] = model.predict_and_evaluate_batch(batch)
+        for agent_type, metric_dict in eval_results.items():
+            for metric, values in metric_dict.items():
+                model_perf[agent_type][metric].append(values.cpu().numpy())
+
+        for idx, metric in enumerate(metrics_list):
+            if len(model_perf[AgentType.VEHICLE]) == 0:
+                break
+
+            metric_values = np.concatenate(
+                model_perf[AgentType.VEHICLE][metric]
+            ).tolist()
+            if idx == 0:
+                model_eval_dict["agent_ts"].extend([agent_ts] * len(metric_values))
+
+            model_eval_dict[metric].extend(metric_values)
+
+
+# per_agent_eval(
+#     curr_agent,
+#     tpp,
+#     "Base",
+#     online_batch,
+#     agent_ts,
+#     base_dict,
+#     plot=plot_per_step,
+# )
+
 
 def plot_trajectory(waypoints):
     # Extracting x, y and theta values from the waypoints
