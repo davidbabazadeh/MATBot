@@ -1,0 +1,30 @@
+<?xml version="1.0" ?>
+<sdf version="1.6">
+  <world name="custom_map_world">
+    <include>
+      <uri>model://sun</uri>
+    </include>
+    <include>
+      <uri>model://ground_plane</uri>
+    </include>
+    <model name="custom_map">
+      <static>true</static>
+      <link name="map_link">
+        <visual name="map_visual">
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>10 10</size> <!-- Adjust size based on your map -->
+            </plane>
+          </geometry>
+          <material>
+            <script>
+              <uri>file://</uri>
+              <name>file://~/MATBot/saved_maps/test_map_1.pgm</name>
+            </script>
+          </material>
+        </visual>
+      </link>
+    </model>
+  </world>
+</sdf>
