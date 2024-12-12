@@ -5,7 +5,7 @@
     <arg name="poll_rate" default="10.0"/>
     
     <!-- Camera settings -->
-    <include file="lab4_cam/launch/run_cam.launch"/>
+    <include file="matbot/launch/run_cam.launch"/>
 
     <!-- AR tag tracker -->
     <include file="lab4_cam/launch/ar_track.launch">
@@ -14,7 +14,7 @@
         <arg name="max_track_error" value="0.05"/>
         <arg name="cam_image_topic" value="/usb_cam/image_raw"/>
         <arg name="cam_info_topic" value="/usb_cam/camera_info"/>
-        <arg name="output_frame" value="/usb_cam"/>
+        <arg name="output_frame" value="usb_cam"/>
     </include>
 
     <!-- State collector node -->

@@ -1,0 +1,35 @@
+<launch>
+    <!-- Camera settings -->
+    <include file="matbot/launch/run_cam.launch"/>
+
+    <!-- AR tag tracker -->
+    <include file="lab4_cam/launch/ar_track.launch">
+        <arg name="marker_size" value="16.5"/>
+        <arg name="max_new_marker_error" value="0.05"/>
+        <arg name="max_track_error" value="0.05"/>
+        <arg name="cam_image_topic" value="/usb_cam/image_raw"/>
+        <arg name="cam_info_topic" value="/usb_cam/camera_info"/>
+        <arg name="output_frame" value="usb_cam"/>
+    </include>
+
+    <!-- AR State Collector -->
+    <node name="ar_state_collector" pkg="matbot2" type="ar_state_collector.py" output="screen">
+        <param name="poll_rate" value="10.0" />
+        <param name="history_length" value="20" />
+        <rosparam param="ar_tag_ids">[0, 1, 2]</rosparam>
+    </node>
+
+    <!-- Trajectory Predictor -->
+    <node name="trajectory_predictor" pkg="matbot2" type="trajectory_predictor.py" output="screen">
+        <param name="prediction_horizon" value="3.0" />
+        <param name="time_step" value="0.1" />
+        <rosparam param="ar_tag_ids">[0, 1, 6]</rosparam>
+    </node>
+
+    <node name="mpc_controller" pkg="matbot2" type="mpc_controller.py" output="screen">
+        <param name="dt" value="0.1" />
+        <param name="horizon" value="20" />
+        <rosparam param="ar_tag_ids">[0, 1, 6]</rosparam>
+    </node>
+
+</launch>
