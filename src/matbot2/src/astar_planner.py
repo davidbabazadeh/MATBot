@@ -3,7 +3,17 @@ import numpy as np
 from nav_msgs.msg import OccupancyGrid, Path
 from geometry_msgs.msg import PoseStamped
 
-
+"""
+1.	Occupancy Grid Representation:
+	•	The grid is represented as a 2D numpy array, with 1 for obstacles and 0 for free space.
+	•	This can be dynamically updated using sensor data in a ROS environment.
+	2.	ROS Integration:
+	•	The planner publishes the path and occupancy grid as ROS topics (/planned_path and /occupancy_grid).
+	3.	Path Planning:
+	•	The algorithm uses a priority queue (open_set) to find the path with the lowest cost to the goal.
+	4.	Visualization:
+	•	Paths and maps are published to RViz for real-time monitoring.
+"""
 class AStarPlanner:
     def __init__(self, grid):
         """
