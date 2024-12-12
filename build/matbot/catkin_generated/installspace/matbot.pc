@@ -1,0 +1,8 @@
+prefix=/home/george/MATBot/install
+
+Name: matbot
+Description: Description of matbot
+Version: 0.0.0
+Cflags: 
+Libs: -L${prefix}/lib 
+Requires: 
