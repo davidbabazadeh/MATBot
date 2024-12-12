@@ -1,0 +1,5 @@
+This file contains the required install commands for the mpc solver
+
+pip install pyomo
+pip install matplotlib
+pip install ipopt
