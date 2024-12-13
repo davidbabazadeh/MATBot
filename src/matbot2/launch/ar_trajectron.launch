@@ -1,16 +1,31 @@
 <launch>
     <!-- Camera settings -->
-    <include file="matbot/launch/run_cam.launch"/>
+    <node name="usb_cam" pkg="usb_cam" type="usb_cam_node" output="screen" >
+        <param name="video_device" value="/dev/video0" />
+        <param name="image_width" value="1280" />
+        <param name="image_height" value="720" />
+        <param name="pixel_format" value="yuyv" />
+        <param name="camera_frame_id" value="usb_cam" />
+        <param name="io_method" value="mmap"/>
+    </node>
 
     <!-- AR tag tracker -->
-    <include file="lab4_cam/launch/ar_track.launch">
+    <node name="ar_track_alvar" pkg="ar_track_alvar" type="individualMarkersNoKinect">
+        <param name="marker_size" value="5.0" />
+        <param name="max_new_marker_error" value="0.05" />
+        <param name="max_track_error" value="0.05" />
+        <param name="output_frame" value="usb_cam" />
+        <remap from="camera_image" to="/usb_cam/image_raw" />
+        <remap from="camera_info" to="/usb_cam/camera_info" />
+    </node>
+    <!-- <include file="lab4_cam/launch/ar_track.launch">
         <arg name="marker_size" value="16.5"/>
         <arg name="max_new_marker_error" value="0.05"/>
         <arg name="max_track_error" value="0.05"/>
         <arg name="cam_image_topic" value="/usb_cam/image_raw"/>
         <arg name="cam_info_topic" value="/usb_cam/camera_info"/>
         <arg name="output_frame" value="usb_cam"/>
-    </include>
+    </include> -->
 
     <!-- AR State Collector -->
     <node name="ar_state_collector" pkg="matbot2" type="ar_state_collector.py" output="screen">
@@ -26,10 +41,11 @@
         <rosparam param="ar_tag_ids">[0, 1, 6]</rosparam>
     </node>
 
-    <node name="mpc_controller" pkg="matbot2" type="mpc_controller.py" output="screen">
+    <!-- <node name="mpc_controller" pkg="matbot2" type="mpc_controller.py" output="screen">
         <param name="dt" value="0.1" />
         <param name="horizon" value="20" />
         <rosparam param="ar_tag_ids">[0, 1, 6]</rosparam>
-    </node>
+    </node> -->
 
 </launch>
+
