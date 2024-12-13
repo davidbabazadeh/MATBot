@@ -3,7 +3,7 @@ import rospy
 import tf2_ros
 import numpy as np
 from collections import deque
-from geometry_msgs.msg import PoseStamped
+from geometry_msgs.msg import PoseStamped, Transform, TransformStamped
 from ar_track_alvar_msgs.msg import AlvarMarkers
 from std_msgs.msg import Float64MultiArray
 import tf2_geometry_msgs
@@ -14,34 +14,32 @@ class StateCollector:
         # Initialize parameters
         self.poll_rate = rospy.get_param('~poll_rate', 10.0)
         self.history_length = rospy.get_param('~history_length', 1)
-        
-        # Get list of AR tag IDs to track
-        self.ar_tag_ids = rospy.get_param('~ar_tag_ids', [0, 2, 3])
+        self.robot_ar_tag_id = rospy.get_param('~robot_ar_tag_id', 1)
+        self.ar_tag_ids = rospy.get_param('~ar_tag_ids', [0, 1, 6])
+        self.tf_buffer_duration = rospy.Duration(10.0)  # Increased buffer size
         
         # Initialize state storage
-        self.ar_state_histories = {tag_id: deque(maxlen=self.history_length) for tag_id in self.ar_tag_ids}
-        self.ego_state_history = deque(maxlen=self.history_length)
+        self.ar_state_histories = {tag_id: deque(maxlen=self.history_length) 
+                                 for tag_id in self.ar_tag_ids if tag_id != self.robot_ar_tag_id}
         
-        # TF setup
-        self.tf_buffer = tf2_ros.Buffer()
+        # TF setup with larger buffer
+        self.tf_buffer = tf2_ros.Buffer(cache_time=self.tf_buffer_duration)
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer)
+        self.tf_broadcaster = tf2_ros.TransformBroadcaster()
         
-        # Create publishers for AR agents
-        self.ar_state_pubs = {
+        # Store latest transforms and timestamps
+        self.latest_transforms = {}
+        self.transform_cache = {}
+        
+        # Create publishers
+        self.state_pubs = {
             tag_id: rospy.Publisher(
                 f'/agent/ar_{tag_id}/state_history',
                 Float64MultiArray,
                 queue_size=10
-            ) for tag_id in self.ar_tag_ids
+            ) for tag_id in self.ar_tag_ids if tag_id != self.robot_ar_tag_id
         }
         
-        # Create publisher for ego agent (turtlebot)
-        self.ego_state_pub = rospy.Publisher(
-            '/agent/ego/state_history',
-            Float64MultiArray,
-            queue_size=10
-        )
-
         # Subscribe to AR markers
         self.ar_sub = rospy.Subscriber(
             '/ar_pose_marker',
@@ -49,79 +47,109 @@ class StateCollector:
             self.ar_callback
         )
         
-        # Timer for state collection and publishing
-        rospy.Timer(rospy.Duration(1.0/self.poll_rate), self.collect_and_publish_states)
+        # Timer for publishing state histories
+        rospy.Timer(rospy.Duration(1.0/self.poll_rate), self.publish_state_histories)
 
-    def collect_ego_state(self, timestamp):
-        """Collect ego agent state using TF"""
+    def get_transform_with_fallback(self, target_frame, source_frame, timestamp):
+        """Attempt to get transform with fallback to latest available"""
         try:
-            # Look up transform from base_footprint to odom frame
+            # First try: Exact timestamp
             transform = self.tf_buffer.lookup_transform(
-                'odom',              # target frame (fixed frame)
-                'base_footprint',    # source frame (ego robot frame)
-                timestamp,           # time
-                rospy.Duration(0.1)  # timeout
+                target_frame,
+                source_frame,
+                timestamp,
+                rospy.Duration(0.1)
+            )
+            return transform
+        except tf2_ros.ExtrapolationException:
+            try:
+                # Second try: Latest available transform
+                transform = self.tf_buffer.lookup_transform(
+                    target_frame,
+                    source_frame,
+                    rospy.Time(0),  # Latest available transform
+                    rospy.Duration(0.1)
+                )
+                rospy.logdebug(f"Using latest available transform for {source_frame} to {target_frame}")
+                return transform
+            except (tf2_ros.LookupException, tf2_ros.ConnectivityException,
+                    tf2_ros.ExtrapolationException) as e:
+                rospy.logwarn(f"Transform failed for {source_frame} to {target_frame}: {e}")
+                return None
+
+    def update_camera_to_base_transform(self, robot_ar_marker):
+        """Update transform between camera and base_footprint using robot's AR tag"""
+        try:
+            # Get latest transform from odom to base_footprint
+            odom_to_base = self.get_transform_with_fallback(
+                'odom',
+                'base_footprint',
+                robot_ar_marker.header.stamp
             )
             
-            # Extract position from transform
-            position = np.array([
-                transform.transform.translation.x,
-                transform.transform.translation.y
-            ])
+            if odom_to_base is None:
+                return
             
-            # Extract heading from transform
-            quat = transform.transform.rotation
-            euler = euler_from_quaternion([quat.x, quat.y, quat.z, quat.w])
-            heading = euler[2]
+            # Create transform from camera to AR marker
+            transform_stamped = TransformStamped()
+            transform_stamped.header.stamp = robot_ar_marker.header.stamp
+            transform_stamped.header.frame_id = 'odom'
+            transform_stamped.child_frame_id = 'usb_cam'
             
-            # Create state dictionary
-            state = {
-                'position': position,
-                'velocity': np.zeros(2),  # Will be calculated from position history
-                'acceleration': np.zeros(2),
-                'heading': heading,
-                'timestamp': timestamp.to_sec()
-            }
+            # Use the AR marker pose to compute camera position relative to odom
+            marker_pose = robot_ar_marker.pose.pose
             
-            # Calculate velocity and acceleration if we have previous states
-            if self.ego_state_history:
-                prev_state = self.ego_state_history[-1]
-                dt = state['timestamp'] - prev_state['timestamp']
-                if dt > 0:
-                    state['velocity'] = (state['position'] - prev_state['position']) / dt
-                    if len(self.ego_state_history) > 1:
-                        state['acceleration'] = (state['velocity'] - prev_state['velocity']) / dt
+            # Simplified transform computation - adjust based on your setup
+            transform_stamped.transform.translation.x = odom_to_base.transform.translation.x
+            transform_stamped.transform.translation.y = odom_to_base.transform.translation.y
+            transform_stamped.transform.translation.z = odom_to_base.transform.translation.z
+            transform_stamped.transform.rotation = odom_to_base.transform.rotation
             
-            self.ego_state_history.append(state)
-            return True
+            # Broadcast the transform
+            self.tf_broadcaster.sendTransform(transform_stamped)
             
-        except (tf2_ros.LookupException, tf2_ros.ConnectivityException,
-                tf2_ros.ExtrapolationException) as e:
-            rospy.logwarn(f"Error collecting ego state: {e}")
-            return False
+            # Cache the transform
+            self.transform_cache['camera_to_odom'] = transform_stamped
+            
+        except Exception as e:
+            rospy.logwarn(f"Error updating camera transform: {e}")
 
     def ar_callback(self, msg):
         """Process AR tag detections and update state histories"""
+        if not msg.markers:
+            return
+
+        # Update camera transform if robot AR tag is visible
         for marker in msg.markers:
-            if marker.id not in self.ar_tag_ids:
+            if marker.id == self.robot_ar_tag_id:
+                self.update_camera_to_base_transform(marker)
+                break
+        
+        # Process other markers
+        for marker in msg.markers:
+            if marker.id == self.robot_ar_tag_id or marker.id not in self.ar_tag_ids:
                 continue
-                
+
+            # Create a slightly earlier timestamp to avoid extrapolation
+            timestamp = marker.header.stamp - rospy.Duration(0.1)
+            
             try:
-                # Look up transform from marker to odom frame
-                transform = self.tf_buffer.lookup_transform(
-                    'odom',                          # target frame (fixed frame)
-                    f"ar_marker_{marker.id}",        # source frame
-                    marker.header.stamp,             # time
-                    rospy.Duration(1.0)              # timeout
+                # Get transform using fallback method
+                transform = self.get_transform_with_fallback(
+                    'odom',
+                    f"ar_marker_{marker.id}",
+                    timestamp
                 )
                 
-                # Extract position from transform
+                if transform is None:
+                    continue
+                
+                # Extract position and orientation
                 position = np.array([
                     transform.transform.translation.x,
                     transform.transform.translation.y
                 ])
                 
-                # Extract heading from transform
                 quat = transform.transform.rotation
                 euler = euler_from_quaternion([quat.x, quat.y, quat.z, quat.w])
                 heading = euler[2]
@@ -132,7 +160,7 @@ class StateCollector:
                     'velocity': np.zeros(2),
                     'acceleration': np.zeros(2),
                     'heading': heading,
-                    'timestamp': marker.header.stamp.to_sec()
+                    'timestamp': timestamp.to_sec()
                 }
                 
                 # Calculate velocity and acceleration if we have previous states
@@ -146,38 +174,15 @@ class StateCollector:
                 
                 self.ar_state_histories[marker.id].append(state)
                 
-            except (tf2_ros.LookupException, tf2_ros.ConnectivityException,
-                    tf2_ros.ExtrapolationException) as e:
-                rospy.logwarn(f"TF2 error for AR tag {marker.id}: {e}")
+            except Exception as e:
+                rospy.logwarn(f"Error processing AR tag {marker.id}: {e}")
 
-    def collect_and_publish_states(self, event=None):
-        """Collect ego state and publish all states"""
-        # Collect ego state
-        current_time = rospy.Time.now()
-        self.collect_ego_state(current_time)
-        
-        # Publish ego state
-        if self.ego_state_history:
-            history_array = []
-            for state in self.ego_state_history:
-                state_entry = [
-                    *state['position'],     # x, y in odom frame
-                    *state['velocity'],     # vx, vy
-                    *state['acceleration'], # ax, ay
-                    state['heading'],       # heading in odom frame
-                    state['timestamp']      # timestamp
-                ]
-                history_array.extend(state_entry)
-            
-            msg = Float64MultiArray()
-            msg.data = history_array
-            self.ego_state_pub.publish(msg)
-        
-        # Publish AR agents states
-        for tag_id in self.ar_tag_ids:
+    def publish_state_histories(self, event=None):
+        """Publish state histories for all tracked AR tags"""
+        for tag_id in self.ar_state_histories:
             if not self.ar_state_histories[tag_id]:
                 continue
-                
+            
             history_array = []
             for state in self.ar_state_histories[tag_id]:
                 state_entry = [
@@ -191,7 +196,7 @@ class StateCollector:
             
             msg = Float64MultiArray()
             msg.data = history_array
-            self.ar_state_pubs[tag_id].publish(msg)
+            self.state_pubs[tag_id].publish(msg)
 
 def main():
     try:

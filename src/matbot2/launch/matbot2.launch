@@ -23,6 +23,7 @@
     <node name="state_collector" pkg="matbot2" type="state_collector.py" output="screen">
         <param name="poll_rate" value="10.0" />
         <param name="history_length" value="20" />
+        <param name="robot_ar_tag_id" value="2" />
         <rosparam param="ar_tag_ids">[0, 2, 3]</rosparam>
     </node>
 
