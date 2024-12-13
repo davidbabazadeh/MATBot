@@ -24,8 +24,11 @@ def controller(waypoint):
 
     # PID controller parameters
     Kp = np.diag([2.0, 0.8])  # Proportional gains
-    Kd = np.diag([-0.5, 0.5])  # Derivative gains
+    Kd = np.diag([-0.1, 0.1])  # Derivative gains
     Ki = np.diag([0.0, 0.0])  # Integral gains
+
+    max_linear_speed = 0.1
+    max_angular_speed = 0.1
 
     prev_time = rospy.get_time()
     integ = np.array([0.0, 0.0])
@@ -42,8 +45,8 @@ def controller(waypoint):
             # Transform waypoint to base_link frame
             waypoint_pose = PoseStamped()
             waypoint_pose.header.frame_id = "odom"
-            waypoint_pose.pose.position.x = waypoint.pose.position.x
-            waypoint_pose.pose.position.y = waypoint.pose.position.y
+            waypoint_pose.pose.position.x = waypoint[0]
+            waypoint_pose.pose.position.y = waypoint[1]
             waypoint_in_base_link = do_transform_pose(waypoint_pose, trans_odom_to_base_link)
             (roll, pitch, yaw) = tf.transformations.euler_from_quaternion(
                 [waypoint_in_base_link.pose.orientation.x, waypoint_in_base_link.pose.orientation.y,
@@ -51,8 +54,11 @@ def controller(waypoint):
 
             # Calculate errors
             x_error = waypoint_in_base_link.pose.position.x
-            z_error = yaw
-            error = np.array([-x_error, z_error])
+            y_error = waypoint_in_base_link.pose.position.y
+            # z_error = np.(y_error,z_error)
+            error = np.array([x_error, y_error])
+
+            rospy.loginfo(f"x error: {x_error}, y error: {y_error}")
 
             # Proportional term
             proportional = np.dot(Kp, error).squeeze()
@@ -69,8 +75,12 @@ def controller(waypoint):
 
             # Control command
             msg = Twist()
-            msg.linear.x = float(proportional[0] + derivative[0] + integral[0])
-            msg.angular.z = proportional[1] + derivative[1] + integral[1]
+            linear_velocity = proportional[0] + derivative[0] + integral[0]
+            msg.linear.x = max(min(linear_velocity, max_linear_speed), -max_linear_speed)
+            # msg.linear.x = float(proportional[0] + derivative[0] + integral[0])
+            angular_velocity = proportional[1] + derivative[1] + integral[1]
+            msg.angular.z = max(min(angular_velocity, max_angular_speed), -max_angular_speed)
+            # msg.angular.z = proportional[1] + derivative[1] + integral[1]
 
             # Publish control command
             pub.publish(msg)
@@ -80,7 +90,7 @@ def controller(waypoint):
             prev_time = curr_time
 
             # Check if we reached the waypoint
-            if np.abs(error[0]) < 0.1:  # Tolerance for reaching the waypoint
+            if np.abs(x_error) < 0.2 and np.abs(y_error) < 0.2:  # Tolerance for reaching the waypoint
                 rospy.loginfo("Reached waypoint")
                 return  # Move to the next waypoint
 
@@ -98,7 +108,7 @@ def planning_callback(msg):
     """
     try:
         # Start position in world coordinates
-        start = (0.6, 0.0)  # Assume the robot starts at (0, 0) in odom frame
+        start = (0.6, 0.1)  # Assume the robot starts at (0, 0) in odom frame
         goal = (msg.x, msg.y)
 
         # Plan path using A*
@@ -106,7 +116,8 @@ def planning_callback(msg):
 
         if trajectory:
             rospy.loginfo("Trajectory computed. Moving to waypoints...")
-            for waypoint in trajectory.poses:
+            waypoints = [(pose.pose.position.x, pose.pose.position.y) for pose in trajectory.poses]
+            for waypoint in waypoints:
                 controller(waypoint)  # Send each waypoint to the controller
         else:
             rospy.logwarn("No path found by A* planner.")

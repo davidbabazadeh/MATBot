@@ -6,6 +6,8 @@ from nav_msgs.msg import OccupancyGrid, Path
 from geometry_msgs.msg import PoseStamped, Point
 from math import atan2, ceil
 from scipy.ndimage import binary_dilation
+import matplotlib.pyplot as plt
+
 
 class AStarPlanner:
     def __init__(self):
@@ -21,7 +23,7 @@ class AStarPlanner:
         self.height = None
         self.origin = None
         self.robot_radius = 0.105  # meters
-        self.downsample_factor = 10  # Adjustable factor for downsampling
+        self.downsample_factor = 8  # Adjustable factor for downsampling
         
     def map_callback(self, msg):
         # Convert the flat map data into a 2D grid
@@ -162,7 +164,7 @@ class AStarPlanner:
             trajectory.poses.append(pose)
         
         return trajectory
-        
+    #def plot_plan(self, start, goal, path):    
     def plan(self, start, goal):
         if self.inflated_map is None:
             rospy.logwarn("No map received yet")
