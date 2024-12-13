@@ -3,36 +3,53 @@ import rospy
 import numpy as np
 from std_msgs.msg import Float64MultiArray
 from geometry_msgs.msg import PoseArray, Pose
-from tf.transformations import euler_from_quaternion
+from tf.transformations import euler_from_quaternion, quaternion_from_euler
 
 class TrajectoryPredictor:
     def __init__(self):
         # Parameters
         self.prediction_horizon = rospy.get_param('~prediction_horizon', 3.0)  # seconds
         self.time_step = rospy.get_param('~time_step', 0.1)  # 10Hz predictions
-        self.ar_tag_ids = rospy.get_param('~ar_tag_ids', [0, 1, 6])
+        self.ar_tag_ids = rospy.get_param('~ar_tag_ids', [0, 2, 3])
         
-        # Create subscribers for each AR tag's state history
-        self.state_subs = {
+        # Create subscribers for AR agents
+        self.ar_state_subs = {
             tag_id: rospy.Subscriber(
-                f'/agent/{tag_id}/state_history',
+                f'/agent/ar_{tag_id}/state_history',
                 Float64MultiArray,
                 self.state_callback,
-                callback_args=tag_id
+                callback_args=('ar', tag_id)
             ) for tag_id in self.ar_tag_ids
         }
         
-        # Create publishers for predicted trajectories
-        self.trajectory_pubs = {
+        # Create subscriber for ego agent
+        self.ego_state_sub = rospy.Subscriber(
+            '/agent/ego/state_history',
+            Float64MultiArray,
+            self.state_callback,
+            callback_args=('ego', 'ego')
+        )
+        
+        # Create publishers for AR agents' predicted trajectories
+        self.ar_trajectory_pubs = {
             tag_id: rospy.Publisher(
-                f'/agent/{tag_id}/predicted_trajectory',
+                f'/agent/ar_{tag_id}/predicted_trajectory',
                 PoseArray,
                 queue_size=10
             ) for tag_id in self.ar_tag_ids
         }
+        
+        # Create publisher for ego agent's predicted trajectory
+        self.ego_trajectory_pub = rospy.Publisher(
+            '/agent/ego/predicted_trajectory',
+            PoseArray,
+            queue_size=10
+        )
 
-    def state_callback(self, msg, tag_id):
+    def state_callback(self, msg, args):
         """Process incoming state history and publish trajectory prediction"""
+        agent_type, agent_id = args
+        
         # Parse state history
         # Format: [x, y, vx, vy, ax, ay, heading, timestamp] repeated for each point
         state_length = 8  # number of elements per state
@@ -54,12 +71,17 @@ class TrajectoryPredictor:
         # Generate prediction
         predicted_poses = self.predict_trajectory(current_state)
         
-        # Publish prediction
+        # Create and publish prediction message
         msg = PoseArray()
         msg.header.stamp = rospy.Time.now()
-        msg.header.frame_id = 'usb_cam'  # Use same frame as AR tag detection
+        msg.header.frame_id = 'odom'  # All predictions in odom frame
         msg.poses = predicted_poses
-        self.trajectory_pubs[tag_id].publish(msg)
+        
+        # Publish to appropriate topic
+        if agent_type == 'ego':
+            self.ego_trajectory_pub.publish(msg)
+        else:  # ar tag
+            self.ar_trajectory_pubs[agent_id].publish(msg)
 
     def predict_trajectory(self, current_state):
         """Generate predicted trajectory using constant acceleration model"""
@@ -77,17 +99,31 @@ class TrajectoryPredictor:
                 0.5 * current_state['acceleration'] * t**2
             )
             
+            # Predict velocity (could be used for heading prediction)
+            predicted_velocity = (
+                current_state['velocity'] + 
+                current_state['acceleration'] * t
+            )
+            
             # Create pose for this prediction
             pose = Pose()
             pose.position.x = predicted_position[0]
             pose.position.y = predicted_position[1]
             pose.position.z = 0.0
             
-            # Use current heading for orientation (could be improved)
-            pose.orientation.x = 0.0
-            pose.orientation.y = 0.0
-            pose.orientation.z = np.sin(current_state['heading'] / 2)
-            pose.orientation.w = np.cos(current_state['heading'] / 2)
+            # Update heading based on velocity direction if speed is significant
+            speed = np.linalg.norm(predicted_velocity)
+            if speed > 0.1:  # Only update heading if moving
+                predicted_heading = np.arctan2(predicted_velocity[1], predicted_velocity[0])
+            else:
+                predicted_heading = current_state['heading']
+            
+            # Convert heading to quaternion
+            q = quaternion_from_euler(0, 0, predicted_heading)
+            pose.orientation.x = q[0]
+            pose.orientation.y = q[1]
+            pose.orientation.z = q[2]
+            pose.orientation.w = q[3]
             
             poses.append(pose)
             

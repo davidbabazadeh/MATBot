@@ -16,7 +16,7 @@ class StateCollector:
         self.history_length = rospy.get_param('~history_length', 1)
         
         # Get list of AR tag IDs to track
-        self.ar_tag_ids = rospy.get_param('~ar_tag_ids', [0, 1, 6])
+        self.ar_tag_ids = rospy.get_param('~ar_tag_ids', [0, 2, 3])
         
         # Initialize state storage
         self.ar_state_histories = {tag_id: deque(maxlen=self.history_length) for tag_id in self.ar_tag_ids}
