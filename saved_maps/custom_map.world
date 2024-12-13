@@ -20,7 +20,7 @@
           <material>
             <script>
               <uri>file://</uri>
-              <name>file://~/MATBot/saved_maps/test_map_1.pgm</name>
+              <name>file:///home/george/MATBot/saved_maps/custom_map.pgm</name>
             </script>
           </material>
         </visual>

@@ -1,29 +1,32 @@
+#!/usr/bin/env python
+
 import rospy
 import numpy as np
 from nav_msgs.msg import OccupancyGrid, Path
 from geometry_msgs.msg import PoseStamped
+from nav_msgs.msg import Odometry
+import math
 
-"""
-1.	Occupancy Grid Representation:
-	•	The grid is represented as a 2D numpy array, with 1 for obstacles and 0 for free space.
-	•	This can be dynamically updated using sensor data in a ROS environment.
-	2.	ROS Integration:
-	•	The planner publishes the path and occupancy grid as ROS topics (/planned_path and /occupancy_grid).
-	3.	Path Planning:
-	•	The algorithm uses a priority queue (open_set) to find the path with the lowest cost to the goal.
-	4.	Visualization:
-	•	Paths and maps are published to RViz for real-time monitoring.
-"""
 class AStarPlanner:
-    def __init__(self, grid):
+    def __init__(self):
         """
-        A* Planner for TurtleBot3 navigation
-        :param grid: 2D numpy array representing the occupancy grid
+        A* Planner for TurtleBot3 navigation with dynamic map integration.
         """
-        self.grid = grid
-        self.grid_height, self.grid_width = grid.shape
+        rospy.init_node("astar_planner", anonymous=True)
+
+        # Parameters
+        self.grid = None
+        self.grid_width = 0
+        self.grid_height = 0
+        self.resolution = 1.0  # Default grid resolution (meters per cell)
+        self.origin = (0, 0)  # Origin of the map in world coordinates
+
+        # ROS publishers and subscribers
         self.occupancy_pub = rospy.Publisher('/occupancy_grid', OccupancyGrid, queue_size=10)
         self.path_pub = rospy.Publisher('/planned_path', Path, queue_size=10)
+        self.map_sub = rospy.Subscriber('/map', OccupancyGrid, self.map_callback)
+        self.start = None
+        self.goal = None
 
     class Node:
         def __init__(self, position, g=0, h=0, parent=None):
@@ -35,6 +38,17 @@ class AStarPlanner:
 
         def __eq__(self, other):
             return self.position == other.position
+
+    def map_callback(self, msg):
+        """Callback for the /map topic."""
+        self.resolution = msg.info.resolution
+        self.grid_width = msg.info.width
+        self.grid_height = msg.info.height
+        self.origin = (msg.info.origin.position.x, msg.info.origin.position.y)
+
+        # Convert the flat occupancy grid data into a 2D numpy array
+        grid_data = np.array(msg.data).reshape((self.grid_height, self.grid_width))
+        self.grid = np.where(grid_data == 100, 1, 0)  # Convert to binary grid (1: obstacle, 0: free)
 
     def heuristic(self, current, goal):
         """Heuristic function: Euclidean distance."""
@@ -67,6 +81,10 @@ class AStarPlanner:
         :param goal: Tuple of (x, y) for the goal position
         :return: List of path coordinates
         """
+        if self.grid is None:
+            rospy.logwarn("Map not received yet!")
+            return None
+
         start_node = self.Node(start)
         goal_node = self.Node(goal)
 
@@ -103,6 +121,18 @@ class AStarPlanner:
 
         return None  # No path found
 
+    def world_to_grid(self, x, y):
+        """Convert world coordinates to grid indices."""
+        gx = int((x - self.origin[0]) / self.resolution)
+        gy = int((y - self.origin[1]) / self.resolution)
+        return gx, gy
+
+    def grid_to_world(self, gx, gy):
+        """Convert grid indices to world coordinates."""
+        x = gx * self.resolution + self.origin[0]
+        y = gy * self.resolution + self.origin[1]
+        return x, y
+
     def publish_path(self, path):
         """
         Publish the planned path as a ROS Path message.
@@ -115,49 +145,26 @@ class AStarPlanner:
         for point in path:
             pose = PoseStamped()
             pose.header = path_msg.header
-            pose.pose.position.x = point[0]
-            pose.pose.position.y = point[1]
+            pose.pose.position.x, pose.pose.position.y = self.grid_to_world(point[0], point[1])
             path_msg.poses.append(pose)
 
         self.path_pub.publish(path_msg)
 
-    def publish_occupancy_grid(self):
-        """
-        Publish the occupancy grid as a ROS OccupancyGrid message.
-        """
-        msg = OccupancyGrid()
-        msg.header.frame_id = "map"
-        msg.header.stamp = rospy.Time.now()
-        msg.info.resolution = 1.0  # Grid resolution (1m per cell)
-        msg.info.width = self.grid_width
-        msg.info.height = self.grid_height
-        msg.info.origin.position.x = 0
-        msg.info.origin.position.y = 0
-        msg.info.origin.position.z = 0
-        msg.data = self.grid.flatten().tolist()
-
-        self.occupancy_pub.publish(msg)
-
-
 if __name__ == "__main__":
-    rospy.init_node("astar_planner")
+    planner = AStarPlanner()
 
-    # Example grid (1: obstacle, 0: free space)
-    grid = np.zeros((10, 10))
-    grid[3:7, 5] = 1  # Example obstacle
+    # Define start and goal positions in world coordinates
+    start_world = (0.0, 0.0)  # Example start position
+    goal_world = (2.0, 2.0)  # Example goal position
 
-    planner = AStarPlanner(grid)
-
-    start = (0, 0)
-    goal = (9, 9)
+    rospy.sleep(1)  # Allow map to be received
+    start_grid = planner.world_to_grid(*start_world)
+    goal_grid = planner.world_to_grid(*goal_world)
 
     rospy.loginfo("Planning path...")
-    path = planner.plan(start, goal)
+    path = planner.plan(start_grid, goal_grid)
     if path:
         rospy.loginfo(f"Path found: {path}")
         planner.publish_path(path)
-        planner.publish_occupancy_grid()
     else:
         rospy.logwarn("No path found!")
-
-    rospy.spin()

@@ -34,7 +34,7 @@ class OccupancyGridMapNode:
             gray_image = cv2.cvtColor(cv_image, cv2.COLOR_BGR2GRAY)
 
             # Thresholding to create a binary image
-            _, binary_image = cv2.threshold(gray_image, 127, 255, cv2.THRESH_BINARY_INV)
+            _, binary_image = cv2.threshold(gray_image, 127, 255, cv2.THRESH_BINARY)
 
             # Create occupancy grid from binary image
             occupancy_grid = self.create_occupancy_grid(binary_image)
@@ -73,7 +73,7 @@ class OccupancyGridMapNode:
         occupancy_grid.header.frame_id = "map"
         
         # Set resolution and dimensions of the grid
-        occupancy_grid.info.resolution = 0.05  # meters per pixel
+        occupancy_grid.info.resolution = 0.000371  # meters per pixel
         occupancy_grid.info.width = binary_image.shape[1]
         occupancy_grid.info.height = binary_image.shape[0]
         
