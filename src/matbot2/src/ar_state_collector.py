@@ -15,10 +15,15 @@ class ARStateCollector:
 
         # Initialize parameters
         self.poll_rate = rospy.get_param('~poll_rate', 10.0)
-        self.history_length = rospy.get_param('~history_length',1)  # 5 seconds at 10Hz
+        self.history_length = rospy.get_param('~history_length', 1)
         
-        # Get list of AR tag IDs to track
-        self.ar_tag_ids = rospy.get_param('~ar_tag_ids', [0, 1, 6])  # List of AR tag IDs to track
+        # Get reference frame AR tag ID and list of AR tags to track
+        self.reference_frame_id = rospy.get_param('~reference_frame_id', 0)  # ID of the AR tag serving as reference frame
+        self.ar_tag_ids = rospy.get_param('~ar_tag_ids', [0, 1, 2])
+        
+        # Remove reference frame ID from tracked tags if it's in there
+        if self.reference_frame_id in self.ar_tag_ids:
+            self.ar_tag_ids.remove(self.reference_frame_id)
         
         # Initialize state storage for each AR tag
         self.state_histories = {tag_id: deque(maxlen=self.history_length) for tag_id in self.ar_tag_ids}
@@ -52,42 +57,45 @@ class ARStateCollector:
 
     def ar_callback(self, msg):
         """Process AR tag detections and update state histories"""
+        reference_frame = f"ar_marker_{self.reference_frame_id}"
+        
+        # First check if reference marker is visible
+        reference_visible = any(marker.id == self.reference_frame_id for marker in msg.markers)
+        if not reference_visible:
+            rospy.logwarn("Reference frame marker not visible")
+            return
+
         for marker in msg.markers:
-            # Only process markers we're interested in
             if marker.id not in self.ar_tag_ids:
                 continue
                 
             try:
-                # Transform from camera to odom frame
-                rospy.loginfo(f"Looking up transform from {marker.header.frame_id} to usb_cam at {marker.header.stamp}")
+                # Look up the transform from this marker to our reference frame
                 transform = self.tf_buffer.lookup_transform(
-                    'usb_cam',
-                    marker.header.frame_id,
-                    marker.header.stamp,
-                    rospy.Duration(1.0)
+                    reference_frame,                    # target frame
+                    f"ar_marker_{marker.id}",          # source frame
+                    marker.header.stamp,               # time
+                    rospy.Duration(1.0)                # timeout
                 )
-                print(f"Transform successful")
                 
-                # Convert marker pose
-                marker_pose = PoseStamped()
-                marker_pose.header = marker.header
-                marker_pose.pose = marker.pose.pose
+                # Extract position from transform
+                position = np.array([
+                    transform.transform.translation.x,
+                    transform.transform.translation.y
+                ])
                 
-                # Transform to world frame
-                pose_world = tf2_geometry_msgs.do_transform_pose(marker_pose, transform)
-                
-                # Extract position and orientation
-                pos = pose_world.pose.position
-                ori = pose_world.pose.orientation
-                euler = euler_from_quaternion([ori.x, ori.y, ori.z, ori.w])
+                # Extract heading (yaw) from transform
+                quat = transform.transform.rotation
+                euler = euler_from_quaternion([quat.x, quat.y, quat.z, quat.w])
+                heading = euler[2]  # yaw angle
                 
                 # Create state dictionary
                 state = {
-                    'position': np.array([pos.x, pos.y]),  # 2D position
+                    'position': position,  # 2D position relative to reference frame
                     'velocity': np.zeros(2),  # Will be calculated if history exists
                     'acceleration': np.zeros(2),
-                    'heading': euler[2],  # yaw angle
-                    'timestamp': pose_world.header.stamp.to_sec()
+                    'heading': heading,  # heading relative to reference frame
+                    'timestamp': marker.header.stamp.to_sec()
                 }
                 
                 # Calculate velocity if we have previous states
@@ -111,14 +119,13 @@ class ARStateCollector:
             if not self.state_histories[tag_id]:
                 continue
                 
-            # Format for Trajectron++: [x, y, vx, vy, heading, timestamp]
             history_array = []
             for state in self.state_histories[tag_id]:
                 state_entry = [
-                    *state['position'],  # x, y
+                    *state['position'],  # x, y in reference frame
                     *state['velocity'],  # vx, vy
                     *state['acceleration'], # ax, ay
-                    state['heading'],    # heading
+                    state['heading'],    # heading relative to reference frame
                     state['timestamp']   # timestamp
                 ]
                 history_array.extend(state_entry)
