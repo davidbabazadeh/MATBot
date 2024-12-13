@@ -1,0 +1,11 @@
+digraph G {
+"odom" -> "base_footprint"[label=" Broadcaster: /turtlebot3_core\nAverage rate: 29.189\nBuffer length: 4.933\nMost recent transform: 1734100262.55\nOldest transform: 1734100257.616\n"];
+"usb_cam" -> "ar_marker_2"[label=" Broadcaster: /ar_track_alvar\nAverage rate: 8.164\nBuffer length: 4.899\nMost recent transform: 1734100262.527\nOldest transform: 1734100257.628\n"];
+"odom" -> "usb_cam"[label=" Broadcaster: /state_collector\nAverage rate: 8.164\nBuffer length: 4.899\nMost recent transform: 1734100262.527\nOldest transform: 1734100257.628\n"];
+"usb_cam" -> "ar_marker_6"[label=" Broadcaster: /ar_track_alvar\nAverage rate: 8.164\nBuffer length: 4.899\nMost recent transform: 1734100262.527\nOldest transform: 1734100257.628\n"];
+"usb_cam" -> "ar_marker_3"[label=" Broadcaster: /ar_track_alvar\nAverage rate: 5.103\nBuffer length: 4.899\nMost recent transform: 1734100262.527\nOldest transform: 1734100257.628\n"];
+edge [style=invis];
+ subgraph cluster_legend { style=bold; color=black; label ="view_frames Result";
+"Recorded at time: 1734100262.5936503"[ shape=plaintext ] ;
+}->"odom";
+}
