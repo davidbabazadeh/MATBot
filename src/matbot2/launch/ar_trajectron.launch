@@ -11,7 +11,7 @@
 
     <!-- AR tag tracker -->
     <node name="ar_track_alvar" pkg="ar_track_alvar" type="individualMarkersNoKinect">
-        <param name="marker_size" value="5.0" />
+        <param name="marker_size" value="16.5" />
         <param name="max_new_marker_error" value="0.05" />
         <param name="max_track_error" value="0.05" />
         <param name="output_frame" value="usb_cam" />
@@ -31,14 +31,14 @@
     <node name="ar_state_collector" pkg="matbot2" type="ar_state_collector.py" output="screen">
         <param name="poll_rate" value="10.0" />
         <param name="history_length" value="20" />
-        <rosparam param="ar_tag_ids">[0, 1, 2]</rosparam>
+        <rosparam param="ar_tag_ids">[1, 2, 3]</rosparam>
     </node>
 
     <!-- Trajectory Predictor -->
     <node name="trajectory_predictor" pkg="matbot2" type="trajectory_predictor.py" output="screen">
         <param name="prediction_horizon" value="3.0" />
         <param name="time_step" value="0.1" />
-        <rosparam param="ar_tag_ids">[0, 1, 6]</rosparam>
+        <rosparam param="ar_tag_ids">[1, 2, 3 ]</rosparam>
     </node>
 
     <!-- <node name="mpc_controller" pkg="matbot2" type="mpc_controller.py" output="screen">
