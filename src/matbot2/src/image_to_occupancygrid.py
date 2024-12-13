@@ -20,7 +20,7 @@ class OccupancyGridMapNode:
         self.occupancy_grid_publisher = rospy.Publisher('/map', OccupancyGrid, queue_size=10)
         #self.image_subscriber = rospy.Subscriber("/input_image", Image, self.image_callback)
         # Load the image
-        image_path = os.path.expanduser('~/MATBot/saved_maps/imagemap.jpg')
+        image_path = os.path.expanduser('~/Desktop/MATBot/saved_maps/downimagemap.jpg')
         cv_image = cv2.imread(image_path)
         if cv_image is None:
             rospy.logerr(f"Failed to load image from path: {image_path}")
@@ -73,7 +73,7 @@ class OccupancyGridMapNode:
         occupancy_grid.header.frame_id = "map"
         
         # Set resolution and dimensions of the grid
-        occupancy_grid.info.resolution = 0.000371  # meters per pixel
+        occupancy_grid.info.resolution = 0.01  # meters per pixel
         occupancy_grid.info.width = binary_image.shape[1]
         occupancy_grid.info.height = binary_image.shape[0]
         
