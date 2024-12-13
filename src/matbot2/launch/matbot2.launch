@@ -1,4 +1,5 @@
 <launch>
+    <arg name="ar_tag_ids" default="[0, 2, 3]" />
     <!-- Camera settings -->
     <node name="usb_cam" pkg="usb_cam" type="usb_cam_node" output="screen" >
         <param name="video_device" value="/dev/video0" />
@@ -31,8 +32,15 @@
     <node name="trajectory_predictor" pkg="matbot2" type="trajectory_predictor.py" output="screen">
         <param name="prediction_horizon" value="3.0" />
         <param name="time_step" value="0.1" />
-        <rosparam param="ar_tag_ids">[0, 2, 3 ]</rosparam>
+        <param name="ar_tag_ids" value="$(arg ar_tag_ids)" />
     </node>
+
+    <node pkg="matbot2" type="dynamic_occupancy_grid.py" name="dynamic_occupancy_grid" output="screen">
+        <param name="agent_radius" value="0.3" />
+        <param name="update_rate" value="10" />
+        <param name="ar_tag_ids" value="$(arg ar_tag_ids)" />
+    </node>
+
 
 </launch>
 
