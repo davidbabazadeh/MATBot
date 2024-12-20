@@ -69,7 +69,8 @@ class OccupancyGridMapNode:
     def load_static_map(self):
         """Load and process the static map"""
         try:
-            image_path = os.path.expanduser('~/MATBot/saved_maps/imagemap.jpg')
+            # image_path = os.path.expanduser('~/MATBot/saved_maps/imagemap.jpg')
+            image_path = os.path.expanduser('~/ros_workspaces/Final_Proj/MATBot/saved_maps/imagemap.jpg') # (mine is in a diff loc)
             cv_image = cv2.imread(image_path)
             if cv_image is None:
                 rospy.logerr(f"Failed to load image from path: {image_path}")

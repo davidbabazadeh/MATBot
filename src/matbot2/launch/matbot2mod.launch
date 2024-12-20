@@ -1,0 +1,65 @@
+<launch>
+    <!-- Camera settings -->
+    <node name="usb_cam" pkg="usb_cam" type="usb_cam_node" output="screen" >
+        <param name="video_device" value="/dev/video0" />
+        <param name="image_width" value="1280" />
+        <param name="image_height" value="720" />
+        <!-- Use MJPEG for faster frame rate -->
+        <param name="pixel_format" value="yuyv" />
+        <param name="camera_frame_id" value="usb_cam" />
+        <param name="io_method" value="mmap"/>
+    </node>
+
+    <!-- AR tag tracker -->
+    <node name="ar_track_alvar" pkg="ar_track_alvar" type="individualMarkersNoKinect">
+        <param name="marker_size" value="5.0" />
+        <!-- <param name="marker_size" value="16.5" /> -->
+        <param name="max_new_marker_error" value="0.05" />
+        <param name="max_track_error" value="0.05" />
+        <param name="output_frame" value="usb_cam" />
+        <remap from="camera_image" to="/usb_cam/image_raw" />
+        <remap from="camera_info" to="/usb_cam/camera_info" />
+    </node>
+
+    <!-- AR State Collector -->
+    <node name="state_collector" pkg="matbot2" type="state_collector.py" output="screen">
+        <param name="poll_rate" value="10.0" />
+        <param name="history_length" value="20" />
+        <param name="robot_ar_tag_id" value="2" />
+        <rosparam param="ar_tag_ids">[0, 1, 2, 3]</rosparam>
+    </node>
+
+    <!-- Trajectory Predictor -->
+    <node name="trajectory_predictor" pkg="matbot2" type="trajectory_predictor.py" output="screen">
+        <param name="prediction_horizon" value="3.0" />
+        <param name="time_step" value="0.1" />
+        <rosparam param="ar_tag_ids">[0, 1, 2, 3]</rosparam>
+    </node>
+
+    <!-- Integrated occupancy grid system -->
+    <!-- <node name="occupancy_grid_map_node" pkg="matbot2" type="occupancy_grid_map.py" output="screen">
+        <rosparam param="ar_tag_ids">[0, 1, 2, 3]</rosparam>
+        <param name="map_reference_tag" value="3" />  
+        <param name="trajectory_width" value="5" />
+        <param name="update_rate" value="10.0" />
+    </node> -->
+    <node name="image_to_occupancygrid" pkg="matbot2" type="image_to_occupancygrid.py" output="screen">
+    </node>
+
+    <node name="occupancygrid_updater" pkg="matbot2" type="occupancygrid_updater.py" output="screen">
+        <rosparam param="ar_tag_ids">[3]</rosparam>
+    </node>
+
+    <!-- <node name="astar_rviz_test" pkg="matbot2" type="astar_rviz_test.py" output="screen">
+    </node> -->
+
+    <!-- Navigation controller -->
+    <!-- <node name="integrated_nav_controller" pkg="matbot2" type="integrated_nav_controller.py" output="screen">
+        <param name="goal_ar_tag" value="0" />
+        <param name="robot_ar_tag" value="2" />
+        <param name="replan_rate" value="2.0" />
+    </node> -->
+
+
+</launch>
+

@@ -8,6 +8,8 @@ from nav_msgs.msg import OccupancyGrid
 from cv_bridge import CvBridge
 import os
 
+import tf
+
 class OccupancyGridMapNode:
     def __init__(self):
         rospy.init_node('occupancy_grid_map_node', anonymous=True)
@@ -18,9 +20,11 @@ class OccupancyGridMapNode:
 
         # Test initializing publisher to publish to /map
         self.occupancy_grid_publisher = rospy.Publisher('/map', OccupancyGrid, queue_size=10)
+        self.br = tf.TransformBroadcaster()
         #self.image_subscriber = rospy.Subscriber("/input_image", Image, self.image_callback)
         # Load the image
-        image_path = os.path.expanduser('~/MATBot/saved_maps/imagemap.jpg')
+        # image_path = os.path.expanduser('~/MATBot/saved_maps/imagemap.jpg')
+        image_path = os.path.expanduser('~/ros_workspaces/Final_Proj/MATBot/saved_maps/imagemap.jpg')
         cv_image = cv2.imread(image_path)
         if cv_image is None:
             rospy.logerr(f"Failed to load image from path: {image_path}")
@@ -82,6 +86,23 @@ class OccupancyGridMapNode:
         occupancy_grid.info.origin.position.y = 0
         occupancy_grid.info.origin.position.z = 0
         occupancy_grid.info.origin.orientation.w = 1.0
+
+
+        # map_header = rospy.Header()
+        # map_header.time = rospy.Time.now()
+        # map_header.frame_id = "map"
+
+        # self.br.sendTransform(map_header,
+        #                       "map",
+        #                       ((occupancy_grid.info.origin.position.x, occupancy_grid.info.origin.position.y, occupancy_grid.info.origin.position.z), 
+        #                       (occupancy_grid.info.origin.orientation.x, occupancy_grid.info.origin.orientation.y, occupancy_grid.info.origin.orientation.z, occupancy_grid.info.origin.orientation.w))
+        #                       )
+    
+        # self.br.sendTransform((occupancy_grid.info.origin.position.x, occupancy_grid.info.origin.position.y, occupancy_grid.info.origin.position.z), 
+        #                       (occupancy_grid.info.origin.orientation.x, occupancy_grid.info.origin.orientation.y, occupancy_grid.info.origin.orientation.z, occupancy_grid.info.origin.orientation.w), 
+        #                 rospy.Time.now(),
+        #                 "map",
+        #                 "odom")
         
         # Fill occupancy grid data based on binary image
         data = []
