@@ -22,19 +22,22 @@
     </node>
 
     <!-- AR State Collector -->
-    <node name="state_collector" pkg="matbot2" type="state_collector.py" output="screen">
+    <!-- <node name="state_collector" pkg="matbot2" type="state_collector.py" output="screen">
         <param name="poll_rate" value="10.0" />
         <param name="history_length" value="20" />
         <param name="robot_ar_tag_id" value="2" />
         <rosparam param="ar_tag_ids">[0, 1, 2, 3]</rosparam>
-    </node>
+    </node> -->
 
     <!-- Trajectory Predictor -->
-    <node name="trajectory_predictor" pkg="matbot2" type="trajectory_predictor.py" output="screen">
+    <!-- <node name="trajectory_predictor" pkg="matbot2" type="trajectory_predictor.py" output="screen">
         <param name="prediction_horizon" value="3.0" />
         <param name="time_step" value="0.1" />
         <rosparam param="ar_tag_ids">[0, 1, 2, 3]</rosparam>
-    </node>
+    </node> -->
+
+
+    
 
     <!-- Integrated occupancy grid system -->
     <!-- <node name="occupancy_grid_map_node" pkg="matbot2" type="occupancy_grid_map.py" output="screen">
@@ -43,12 +46,17 @@
         <param name="trajectory_width" value="5" />
         <param name="update_rate" value="10.0" />
     </node> -->
+
+
+
     <node name="image_to_occupancygrid" pkg="matbot2" type="image_to_occupancygrid.py" output="screen">
     </node>
 
-    <node name="occupancygrid_updater" pkg="matbot2" type="occupancygrid_updater.py" output="screen">
+    <!-- <node name="occupancygrid_updater" pkg="matbot2" type="occupancygrid_updater.py" output="screen">
         <rosparam param="ar_tag_ids">[3]</rosparam>
-    </node>
+    </node> -->
+
+
 
     <!-- <node name="astar_rviz_test" pkg="matbot2" type="astar_rviz_test.py" output="screen">
     </node> -->

@@ -15,6 +15,8 @@ from tf2_geometry_msgs import do_transform_pose
 import geometry_msgs.msg
 import tf2_geometry_msgs
 
+from state_collector import ar_to_map_length, ar_to_map_width
+
 def get_transform_from_position_orientation(position, orientation, target_frame):
     # Initialize the tf2 buffer and listener
     tf_buffer = tf2_ros.Buffer()

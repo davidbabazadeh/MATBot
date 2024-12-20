@@ -19,7 +19,7 @@ class OccupancyGridMapNode:
         #self.occupancy_grid_publisher = rospy.Publisher('/occupancy_grid', OccupancyGrid, queue_size=10)
 
         # Test initializing publisher to publish to /map
-        self.occupancy_grid_publisher = rospy.Publisher('/map', OccupancyGrid, queue_size=10)
+        self.occupancy_grid_publisher = rospy.Publisher('/occ_map', OccupancyGrid, queue_size=10)
         self.br = tf.TransformBroadcaster()
         #self.image_subscriber = rospy.Subscriber("/input_image", Image, self.image_callback)
         # Load the image

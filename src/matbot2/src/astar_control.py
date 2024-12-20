@@ -23,8 +23,8 @@ def controller(waypoint):
     r = rospy.Rate(10)  # 10 Hz control loop
 
     # PID controller parameters
-    Kp = np.diag([2.0, 0.8])  # Proportional gains
-    Kd = np.diag([0.1, 0.1])  # Derivative gains
+    Kp = np.diag([2.0, 0.5])  # Proportional gains
+    Kd = np.diag([-0.5, 0.5])  # Derivative gains
     Ki = np.diag([0.0, 0.0])  # Integral gains
 
     max_linear_speed = 0.1
